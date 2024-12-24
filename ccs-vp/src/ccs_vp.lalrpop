@@ -1,0 +1,183 @@
+grammar;
+
+use std::str::FromStr;
+use ccs::process::Substitution;
+
+use crate::ast::*;
+use crate::process::*;
+use crate::values::*;
+
+Empty: () = ();
+Whitespace: () = r"\s+";
+Ident: String = r"[a-zA-Z_][a-zA-Z0-9_]*" => <>.to_string();
+Number: u32 = r"[0-9]+" => FromStr::from_str(<>).unwrap();
+
+pub ProgramNode: Program = { <stmts:StatementList> => Program(stmts) }
+
+StatementNode: Statement = {
+    "#!" "[" <cmd:CommandNode> "]" => Statement::Exec(cmd),
+    "enum" <ty:Ident> "{" <tags:TagList> "}" => Statement::DefEnum(ty, tags),
+    "type" <alias:Ident> "=" <ty:Ident> ";" => Statement::DefAlias(alias, ty),
+
+    "fn" <name:Ident> "()" "{" <body:ProcessNode> "}" => Statement::DefConstant(name, (vec![], body)),
+    "fn" <name:Ident> "()" "{" <body:ProcessNode> "}" "[" <subs:SubstitutionList> "]" => Statement::DefConstant(name, (vec![], Process::substitution(body, Substitution::new(subs)))),
+    "fn" <name:Ident> "()" "{" <body:ProcessNode> "}" "\\" "{" <chans:VarList> "}" => Statement::DefConstant(name, (vec![], Process::restriction(body, chans))),
+
+    "fn" <name:Ident> "(" <params:VarList> ")" "{" <body:ProcessNode> "}" => Statement::DefConstant(name, (params, body)),
+    "fn" <name:Ident> "(" <params:VarList> ")" "{" <body:ProcessNode> "}" "[" <subs:SubstitutionList> "]" => Statement::DefConstant(name, (params, Process::substitution(body, Substitution::new(subs)))),
+    "fn" <name:Ident> "(" <params:VarList> ")" "{" <body:ProcessNode> "}" "\\" "{" <chans:VarList> "}" => Statement::DefConstant(name, (params, Process::restriction(body, chans))),
+
+    "fn main" "()""{" <body:ProcessNode> "}" => Statement::DefConstant("main".to_string(), (vec![], body)),
+}
+CommandNode: Command = {
+    "bounds" "(" <min:Number> ".." <max:Number> ")" => Command::SetBounds(min, max),
+    "bounds" "(" <min:Number> "..=" <max:Number> ")" => Command::SetBounds(min, max + 1),
+}
+
+ProcessNode: Process = {
+    #[precedence(level="1")]
+    "nil" => Process::nil(),
+    <x:Ident> "()"  => Process::constant(x, vec![]),
+    <x:Ident> "(" <args:ValList> ")"  => Process::constant(x, args),
+
+    #[precedence(level="2")]
+    "if" <b:BExprNode> "{" <p:ProcessNode> "}" => Process::if_then(b, p),
+    "if" <b:BExprNode> "{" <p:ProcessNode> "}" "else" "{" <q:ProcessNode> "}" => Process::if_then_else(b, p, q),
+    <m:ChannelNode> ";" => Process::action(m, Process::nil()),
+    <m:ChannelNode> ";" <p:ProcessNode> => Process::action(m, p),
+    "(" <sum:SumProcessList> ")" => Process::sum(sum),
+    "(" <par:ParProcessList> ")" => par,
+    "(" <p:ProcessNode> "\\" "{" <chans:VarList> "}" ")" => Process::restriction(p, chans),
+    "(" <p:ProcessNode> "[" <subs:SubstitutionList> "]" ")" => Process::substitution(p, Substitution::new(subs)),
+}
+ChannelNode: Channel = {
+    "tau" => Channel::Tau,
+
+    <x:Ident> "!" => Channel::Send(x, None),
+    <x:Ident> "!" "()" => Channel::Send(x, None),
+    <x:Ident> "!" "(" <val:ValueNode> ")" => Channel::Send(x, Some(val)),
+
+    <x:Ident> "?" => Channel::Recv(x, None),
+    <x:Ident> "?" "()" => Channel::Recv(x, None),
+    <x:Ident> "?" "(" <var:Ident> ")" => Channel::Recv(x, Some(var)),
+}
+
+ValueNode: Value = {
+    <x:Ident> => Value::Var(x),
+    <x:AExprNode> => Value::AExpr(x),
+    <x:BExprNode> => Value::BExpr(x),
+    <ty:Ident> "::" <tag:Ident> => Value::Enum(ty, tag, vec![]),
+    <ty:Ident> "::" <tag:Ident> "(" <vals:ValList> ")"=> Value::Enum(ty, tag, vals),
+}
+AExprNode: AExpr = {
+    #[precedence(level="1")]
+    <n:Number> => AExpr::Lit(n),
+
+    #[precedence(level="5")]
+    "(" <l:AExprNode> "+" <r:AExprNode> ")" => AExpr::Add(Box::new(l), Box::new(r)),
+    "(" <l:AExprNode> "-" <r:AExprNode> ")" => AExpr::Sub(Box::new(l), Box::new(r)),
+    "(" <l:AExprNode> "/" <r:AExprNode> ")" => AExpr::Div(Box::new(l), Box::new(r)),
+    "(" <l:AExprNode> "*" <r:AExprNode> ")" => AExpr::Mul(Box::new(l), Box::new(r)),
+
+    "(" <l:Ident> "+" <r:AExprNode> ")" => AExpr::Add(Box::new(AExpr::Var(l)), Box::new(r)),
+    "(" <l:Ident> "-" <r:AExprNode> ")" => AExpr::Sub(Box::new(AExpr::Var(l)), Box::new(r)),
+    "(" <l:Ident> "/" <r:AExprNode> ")" => AExpr::Div(Box::new(AExpr::Var(l)), Box::new(r)),
+    "(" <l:Ident> "*" <r:AExprNode> ")" => AExpr::Mul(Box::new(AExpr::Var(l)), Box::new(r)),
+
+    "(" <l:AExprNode> "+" <r:Ident> ")" => AExpr::Add(Box::new(l), Box::new(AExpr::Var(r))),
+    "(" <l:AExprNode> "-" <r:Ident> ")" => AExpr::Sub(Box::new(l), Box::new(AExpr::Var(r))),
+    "(" <l:AExprNode> "/" <r:Ident> ")" => AExpr::Div(Box::new(l), Box::new(AExpr::Var(r))),
+    "(" <l:AExprNode> "*" <r:Ident> ")" => AExpr::Mul(Box::new(l), Box::new(AExpr::Var(r))),
+
+    "(" <l:Ident> "+" <r:Ident> ")" => AExpr::Add(Box::new(AExpr::Var(l)), Box::new(AExpr::Var(r))),
+    "(" <l:Ident> "-" <r:Ident> ")" => AExpr::Sub(Box::new(AExpr::Var(l)), Box::new(AExpr::Var(r))),
+    "(" <l:Ident> "/" <r:Ident> ")" => AExpr::Div(Box::new(AExpr::Var(l)), Box::new(AExpr::Var(r))),
+    "(" <l:Ident> "*" <r:Ident> ")" => AExpr::Mul(Box::new(AExpr::Var(l)), Box::new(AExpr::Var(r))),
+}
+BExprNode: BExpr = {
+    #[precedence(level="1")]
+    "true"  => BExpr::Lit(true),
+    "false" => BExpr::Lit(false),
+
+    #[precedence(level="3")]
+    "!" <b:BExprNode> => BExpr::Not(Box::new(b)),
+    "!" <x:Ident> => BExpr::Not(Box::new(BExpr::Var(x))),
+
+    "(" <l:BExprNode> "&&" <r:BExprNode> ")" => BExpr::And(Box::new(l), Box::new(r)),
+    "(" <l:BExprNode> "||" <r:BExprNode> ")" => BExpr::Or(Box::new(l), Box::new(r)),
+
+    "(" <l:BExprNode> "&&" <r:Ident> ")" => BExpr::And(Box::new(l), Box::new(BExpr::Var(r))),
+    "(" <l:BExprNode> "||" <r:Ident> ")" => BExpr::Or(Box::new(l), Box::new(BExpr::Var(r))),
+
+    "(" <l:Ident> "&&" <r:BExprNode> ")" => BExpr::And(Box::new(BExpr::Var(l)), Box::new(r)),
+    "(" <l:Ident> "||" <r:BExprNode> ")" => BExpr::Or(Box::new(BExpr::Var(l)), Box::new(r)),
+
+    "(" <l:Ident> "&&" <r:Ident> ")" => BExpr::And(Box::new(BExpr::Var(l)), Box::new(BExpr::Var(r))),
+    "(" <l:Ident> "||" <r:Ident> ")" => BExpr::Or(Box::new(BExpr::Var(l)), Box::new(BExpr::Var(r))),
+
+    "(" <l:AExprNode> "==" <r:AExprNode> ")" => BExpr::NumEq(l, r),
+    "(" <l:AExprNode> "!=" <r:AExprNode> ")" => BExpr::NumNotEq(l, r),
+    "(" <l:AExprNode> "<"  <r:AExprNode> ")" => BExpr::NumLt(l, r),
+    "(" <l:AExprNode> ">"  <r:AExprNode> ")" => BExpr::NumGt(l, r),
+    "(" <l:AExprNode> "<=" <r:AExprNode> ")" => BExpr::NumLtEq(l, r),
+    "(" <l:AExprNode> ">=" <r:AExprNode> ")" => BExpr::NumGtEq(l, r),
+
+    "(" <l:AExprNode> "==" <r:Ident> ")" => BExpr::NumEq(l, AExpr::Var(r)),
+    "(" <l:AExprNode> "!=" <r:Ident> ")" => BExpr::NumNotEq(l, AExpr::Var(r)),
+    "(" <l:AExprNode> "<"  <r:Ident> ")" => BExpr::NumLt(l, AExpr::Var(r)),
+    "(" <l:AExprNode> ">"  <r:Ident> ")" => BExpr::NumGt(l, AExpr::Var(r)),
+    "(" <l:AExprNode> "<=" <r:Ident> ")" => BExpr::NumLtEq(l, AExpr::Var(r)),
+    "(" <l:AExprNode> ">=" <r:Ident> ")" => BExpr::NumGtEq(l, AExpr::Var(r)),
+
+    "(" <l:Ident> "==" <r:AExprNode> ")" => BExpr::NumEq(AExpr::Var(l), r),
+    "(" <l:Ident> "!=" <r:AExprNode> ")" => BExpr::NumNotEq(AExpr::Var(l), r),
+    "(" <l:Ident> "<"  <r:AExprNode> ")" => BExpr::NumLt(AExpr::Var(l), r),
+    "(" <l:Ident> ">"  <r:AExprNode> ")" => BExpr::NumGt(AExpr::Var(l), r),
+    "(" <l:Ident> "<=" <r:AExprNode> ")" => BExpr::NumLtEq(AExpr::Var(l), r),
+    "(" <l:Ident> ">=" <r:AExprNode> ")" => BExpr::NumGtEq(AExpr::Var(l), r),
+
+    "(" <l:Ident> "==" <r:Ident> ")" => BExpr::NumEq(AExpr::Var(l), AExpr::Var(r)),
+    "(" <l:Ident> "!=" <r:Ident> ")" => BExpr::NumNotEq(AExpr::Var(l), AExpr::Var(r)),
+    "(" <l:Ident> "<"  <r:Ident> ")" => BExpr::NumLt(AExpr::Var(l), AExpr::Var(r)),
+    "(" <l:Ident> ">"  <r:Ident> ")" => BExpr::NumGt(AExpr::Var(l), AExpr::Var(r)),
+    "(" <l:Ident> "<=" <r:Ident> ")" => BExpr::NumLtEq(AExpr::Var(l), AExpr::Var(r)),
+    "(" <l:Ident> ">=" <r:Ident> ")" => BExpr::NumGtEq(AExpr::Var(l), AExpr::Var(r)),
+}
+
+pub StatementList: Vec<Statement> = {
+    <head:StatementNode> => vec![head],
+    <head:StatementNode> <tail:StatementList> => [vec![head], tail].concat(),
+}
+SumProcessList: Vec<Process> = {
+    <head:ProcessNode> => vec![head],
+    <head:ProcessNode> "+" <tail:SumProcessList> => [vec![head], tail].concat(),
+}
+ParProcessList: Process = {
+    <l:ProcessNode> "|" <r:ProcessNode> => Process::par(l, r),
+    <head:ProcessNode> "|" <tail:ParProcessList> => Process::par(head, tail),
+}
+VarList: Vec<String> = {
+    <Empty> => vec![],
+    <head:Ident> => vec![head],
+    <head:Ident> "," <tail:VarList> => [vec![head], tail].concat(),
+}
+ValList: Vec<Value> = {
+    <Empty> => vec![],
+    <head:ValueNode> => vec![head],
+    <head:ValueNode> "," <tail:ValList> => [vec![head], tail].concat(),
+}
+TagList: Vec<(String, Vec<String>)> = {
+    <head:Ident> => vec![(head, vec![])],
+    <head:Ident> "(" <tys:TagTyList> ")" => vec![(head, tys)],
+    <head:Ident> "," <tail:TagList> => [vec![(head, vec![])], tail].concat(),
+    <head:Ident> "(" <tys:TagTyList> ")" "," <tail:TagList> => [vec![(head, tys)], tail].concat(),
+}
+TagTyList: Vec<String> = {
+    <Empty> => vec![],
+    <head:Ident> => vec![head],
+    <head:Ident> "," <tail:VarList> => [vec![head], tail].concat(),
+}
+SubstitutionList: Vec<(String, String)> = {
+    <new:Ident> "/" <old:Ident> => vec![(new, old)],
+    <new:Ident> "/" <old:Ident> "," <tail:SubstitutionList> => [vec![(new, old)], tail].concat(),
+}

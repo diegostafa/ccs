@@ -1,0 +1,12 @@
+[package]
+name = "ccs"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+lalrpop = "0.22.0"
+
+[dependencies]
+cli-tables = "0.2.1"
+itertools = "0.13.0"
+lalrpop-util = { version = "0.22.0", features = ["lexer"] }
