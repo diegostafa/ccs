@@ -80,27 +80,40 @@ impl Process {
         }
     }
 
-    pub fn unfold(self, ctx: &Context, seen: &mut HashSet<String>) -> Self {
+    pub fn unfold(self, ctx: &Context) -> Self {
+        let mut seen = HashSet::new();
+        if let Some(name) = ctx.name_of(&self) {
+            seen.insert(name.to_string());
+        }
+        self.unfold_rec(ctx, &mut seen)
+    }
+    fn unfold_rec(self, ctx: &Context, seen: &mut HashSet<String>) -> Process {
         match self {
             Process::Constant(name) => {
                 if seen.contains(&name) {
                     return Process::Constant(name);
                 }
                 seen.insert(name.clone());
-                ctx.get_process(&name).unwrap().clone().unfold(ctx, seen)
+                let p = ctx
+                    .get_process(&name)
+                    .unwrap()
+                    .clone()
+                    .unfold_rec(ctx, seen);
+                seen.remove(&name);
+                p
             }
-            Process::Action(ch, p) => Process::action(ch, p.unfold(ctx, seen)),
+            Process::Action(ch, p) => Process::action(ch, p.unfold_rec(ctx, seen)),
             Process::Sum(sum) => {
-                Process::sum(sum.into_iter().map(|p| p.unfold(ctx, seen)).collect())
+                Process::sum(sum.into_iter().map(|p| p.unfold_rec(ctx, seen)).collect())
             }
-            Process::Par(p, q) => Process::par(p.unfold(ctx, seen), q.unfold(ctx, seen)),
-            Process::Substitution(p, subs) => Process::substitution(p.unfold(ctx, seen), subs),
-            Process::Restriction(p, chans) => Process::restriction(p.unfold(ctx, seen), chans),
+            Process::Par(p, q) => Process::par(p.unfold_rec(ctx, seen), q.unfold_rec(ctx, seen)),
+            Process::Substitution(p, subs) => Process::substitution(p.unfold_rec(ctx, seen), subs),
+            Process::Restriction(p, chans) => Process::restriction(p.unfold_rec(ctx, seen), chans),
         }
     }
 
     pub fn derive_lts(self, ctx: &Context) -> Lts {
-        let unfolded = self.unfold(ctx, &mut HashSet::new());
+        let unfolded = self.unfold(ctx);
         let mut transitions = unfolded.derive();
         let mut len = 0;
         while transitions.len() != len {
@@ -186,8 +199,8 @@ impl Process {
 impl Display for Process {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Process::Constant(k) => write!(f, "{}", k),
-            Process::Action(ch, p) => write!(f, "{}; {}", ch, p),
+            Process::Constant(k) => write!(f, "{}()", k),
+            Process::Action(ch, p) => write!(f, "{}.{}", ch, p),
             Process::Sum(procs) => {
                 if procs.is_empty() {
                     write!(f, "NIL")
@@ -196,10 +209,12 @@ impl Display for Process {
                 }
             }
             Process::Par(p, q) => write!(f, "({} | {})", p, q),
-            Process::Restriction(p, chans) => write!(f, "({} \\ [{}])", p, chans.iter().join(", ")),
+            Process::Restriction(p, chans) => {
+                write!(f, "({} \\ {{ {} }})", p, chans.iter().join(", "))
+            }
             Process::Substitution(p, subs) => write!(
                 f,
-                "({p} [{}])",
+                "({p}[{}])",
                 subs.pairs()
                     .iter()
                     .map(|(new, old)| format!("{new}/{old}"))
