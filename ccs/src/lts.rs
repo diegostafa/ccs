@@ -54,7 +54,7 @@ impl Lts {
             vec!["State", "Action", "Next state"],
             self.0
                 .iter()
-                .map(|(s1, a, s2)| vec![format!("{}", s1), format!("{}", a), format!("{}", s2)])
+                .map(|(s1, a, s2)| vec![format!("{s1}"), format!("{a}"), format!("{s2}")])
                 .collect(),
         );
     }
@@ -63,7 +63,7 @@ impl Lts {
             vec!["State"],
             self.get_states()
                 .iter()
-                .map(|s| vec![format!("{:?}", s)])
+                .map(|s| vec![format!("{s}")])
                 .collect(),
         );
     }
@@ -72,7 +72,7 @@ impl Lts {
             vec!["Action"],
             self.get_actions()
                 .iter()
-                .map(|s| vec![format!("{}", s)])
+                .map(|a| vec![format!("{a}")])
                 .collect(),
         );
     }
@@ -135,10 +135,19 @@ impl Lts {
         p: &'a Process,
         q: &'b Process,
     ) -> Vec<Bisimulation<'a, 'b>> {
-        self.find_bisimulations_between_rec(other, p, q, Bisimulation::default(), HashSet::new())
-            .into_iter()
-            .filter(|b| self.check_bisimulation(other, b))
-            .collect()
+        assert!(self.get_states().contains(p));
+        assert!(other.get_states().contains(q));
+
+        self.find_bisimulations_between_rec(
+            other,
+            p,
+            q,
+            &mut Default::default(),
+            &mut Default::default(),
+        )
+        .into_iter()
+        .filter(|b| self.check_bisimulation(other, b))
+        .collect()
     }
 
     fn find_bisimulations_between_rec<'a, 'b>(
@@ -146,34 +155,28 @@ impl Lts {
         other: &'b Self,
         p: &'a Process,
         q: &'b Process,
-        bisim: Bisimulation<'a, 'b>,
-        checked: HashSet<&'a Transition>,
+        bisim: &mut Bisimulation<'a, 'b>,
+        seen: &mut HashSet<&'a Transition>,
     ) -> Vec<Bisimulation<'a, 'b>> {
-        let mut bisims = vec![];
         let mut ptrans = self.get_transitions_from(p);
-        ptrans = ptrans.difference(&checked).cloned().collect();
+        ptrans = ptrans.difference(seen).cloned().collect();
 
         if ptrans.is_empty() {
             if !bisim.0.is_empty() {
-                bisims.push(bisim.clone());
+                return vec![bisim.clone().append((p, q))];
             }
-            return bisims;
+            return vec![];
         }
 
-        let qtrans = other.get_transitions_from(q);
-        for pt in ptrans {
-            for qt in &qtrans {
-                if pt.1 == qt.1 {
-                    let mut checked = checked.clone();
-                    checked.insert(pt);
-                    let new = self.find_bisimulations_between_rec(
-                        other,
-                        &pt.2,
-                        &qt.2,
-                        bisim.clone().append((&pt.0, &qt.0)),
-                        checked,
-                    );
-                    bisims.extend(new);
+        let mut bisims = vec![];
+        for pt @ (p1, pa, p2) in &ptrans {
+            for (q1, qa, q2) in &other.get_transitions_from(q) {
+                if pa == qa {
+                    bisim.insert((p1, q1));
+                    seen.insert(pt);
+                    bisims.extend(self.find_bisimulations_between_rec(other, p2, q2, bisim, seen));
+                    seen.remove(pt);
+                    bisim.remove((p1, q1));
                 }
             }
         }
@@ -184,6 +187,9 @@ impl Lts {
 #[derive(Debug, Default, Clone, Eq)]
 pub struct Bisimulation<'a, 'b>(HashSet<(&'a Process, &'b Process)>);
 impl<'a, 'b> Bisimulation<'a, 'b> {
+    pub fn new() -> Self {
+        Default::default()
+    }
     pub fn insert(&mut self, p: (&'a Process, &'b Process)) {
         self.0.insert(p);
     }
@@ -191,13 +197,16 @@ impl<'a, 'b> Bisimulation<'a, 'b> {
         self.0.insert(p);
         self
     }
+    pub fn remove(&mut self, p: (&'a Process, &'b Process)) {
+        self.0.remove(&p);
+    }
     pub fn pretty_print(&self) {
         assert!(!self.0.is_empty());
         draw_table(
             vec!["State", "", "State"],
             self.0
                 .iter()
-                .map(|(s1, s2)| vec![format!("{:?}", s1), format!("~"), format!("{:?}", s2)])
+                .map(|(s1, s2)| vec![format!("{s1}"), format!("~"), format!("{s2}")])
                 .collect(),
         );
     }

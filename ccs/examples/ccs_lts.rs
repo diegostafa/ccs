@@ -5,4 +5,8 @@ fn main() {
     let ccs = Context::from(ccs::ast::Program::parse(&file_ccs).unwrap());
     let lts = ccs.to_lts();
     lts.print_relations();
+    println!("bisimulations: ");
+    for b in lts.find_bisimulations(&lts) {
+        b.pretty_print();
+    }
 }
