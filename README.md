@@ -1,4 +1,4 @@
-CCSVP to CCS to LTS
+A library for the [CCS](https://en.wikipedia.org/wiki/Calculus_of_communicating_systems)/VP language
 
 ```rs
 #![bounds(0..1000)]

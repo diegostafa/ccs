@@ -133,7 +133,6 @@ impl Process {
     fn derive(&self) -> HashSet<Transition> {
         match self {
             Process::Constant(_) => Default::default(),
-
             Process::Action(a, p) => [(self.clone(), a.clone(), *p.clone())]
                 .into_iter()
                 .collect(),
