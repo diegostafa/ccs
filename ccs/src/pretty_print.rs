@@ -24,10 +24,10 @@ pub fn print_bisimulation(b: &Bisimulation) {
     );
 }
 
-pub fn print_relations(lts: &Lts) {
+pub fn print_transitions(lts: &Lts) {
     draw_table(
         vec!["State", "Action", "Next state"],
-        lts.get_transitions()
+        lts.transitions()
             .iter()
             .map(|(s1, a, s2)| vec![format!("{s1}"), format!("{a}"), format!("{s2}")])
             .collect(),
@@ -36,18 +36,12 @@ pub fn print_relations(lts: &Lts) {
 pub fn print_states(lts: &Lts) {
     draw_table(
         vec!["State"],
-        lts.get_nodes()
-            .iter()
-            .map(|s| vec![format!("{s}")])
-            .collect(),
+        lts.nodes().iter().map(|s| vec![format!("{s}")]).collect(),
     );
 }
 pub fn print_actions(lts: &Lts) {
     draw_table(
         vec!["Action"],
-        lts.get_edges()
-            .iter()
-            .map(|a| vec![format!("{a}")])
-            .collect(),
+        lts.edges().iter().map(|a| vec![format!("{a}")]).collect(),
     );
 }

@@ -1,4 +1,4 @@
-use ccs::pretty_print::{print_bisimulation, print_relations};
+use ccs::pretty_print::{print_bisimulation, print_transitions};
 use ccs_vp::ast::Program;
 use ccs_vp::context::Context as ContextVp;
 
@@ -10,14 +10,8 @@ fn main() {
         println!("{:?}", c);
     }
     let lts = ctx_ccs.to_lts();
-    print_relations(&lts);
-    println!("bisimulations: ");
-    for b in lts.find_bisimulations(&lts) {
-        print_bisimulation(&b);
-    }
-
+    print_transitions(&lts);
     println!("bisimilarity: ");
-    let bimilarity = lts.find_bisimilarity();
+    let bimilarity = lts.bisimilarity(&lts);
     print_bisimulation(&bimilarity);
-    assert!(lts.check_bisimulation(&lts, &bimilarity));
 }
