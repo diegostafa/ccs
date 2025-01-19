@@ -80,7 +80,7 @@ impl Process {
         }
     }
 
-    pub fn unfold(self, ctx: &Context) -> Self {
+    pub fn unfold_consts(self, ctx: &Context) -> Self {
         let mut seen = HashSet::new();
         if let Some(name) = ctx.name_of(&self) {
             seen.insert(name.to_string());
@@ -113,7 +113,7 @@ impl Process {
     }
 
     pub fn derive_lts(self, ctx: &Context) -> Lts {
-        let unfolded = self.unfold(ctx);
+        let unfolded = self.unfold_consts(ctx);
         let mut transitions = unfolded.derive();
         let mut len = 0;
         while transitions.len() != len {
@@ -122,12 +122,7 @@ impl Process {
                 transitions.extend(t.2.derive());
             }
         }
-        Lts::new(
-            transitions
-                .into_iter()
-                .map(|t| (t.0.flatten(), t.1, t.2.flatten()))
-                .collect(),
-        )
+        Lts::new(transitions.into_iter().map(|t| (t.0, t.1, t.2)).collect())
     }
 
     fn derive(&self) -> HashSet<Transition> {

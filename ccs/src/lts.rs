@@ -35,6 +35,14 @@ impl Lts {
         }
         Self(transitions)
     }
+    pub fn flatten(self) -> Self {
+        Self(
+            self.0
+                .into_iter()
+                .map(|t| (t.0.flatten(), t.1, t.2.flatten()))
+                .collect(),
+        )
+    }
     pub fn edges(&self) -> HashSet<&Channel> {
         self.0.iter().map(|t| &t.1).collect()
     }
@@ -51,43 +59,34 @@ impl Lts {
         self.0.iter().filter(|t| t.2 == *p).collect()
     }
     pub fn bisimilarity<'a, 'b>(&'a self, other: &'b Lts) -> Bisimulation<'a, 'b> {
-        let top: Bisimulation = self
+        let top = self
             .nodes()
-            .iter()
-            .cloned()
-            .cartesian_product(other.nodes().iter().cloned())
+            .into_iter()
+            .cartesian_product(other.nodes().iter().copied())
             .collect();
-
-        let is_similar = |this: &Lts, other: &Lts, p: &Process, q: &Process, r: &Bisimulation| {
-            this.transitions_from(p).iter().all(|pt| {
-                other
-                    .transitions_from(q)
-                    .iter()
-                    .any(|qt| pt.1 == qt.1 && r.contains(&(&pt.2, &qt.2)))
-            })
-        };
-
         let f = |r: &Bisimulation<'a, 'b>| {
-            r.iter()
-                .filter(|(p, q)| {
-                    is_similar(self, other, p, q, r) && is_similar(other, self, q, p, r)
+            let is_similar = |this: &Lts, other: &Lts, p: &Process, q: &Process| {
+                this.transitions_from(p).iter().all(|pt| {
+                    other
+                        .transitions_from(q)
+                        .iter()
+                        .any(|qt| pt.1 == qt.1 && r.contains(&(&pt.2, &qt.2)))
                 })
+            };
+            r.iter()
+                .filter(|(p, q)| is_similar(self, other, p, q) && is_similar(other, self, q, p))
                 .cloned()
                 .collect()
         };
-
         gfp(f, top)
     }
 }
 
-fn gfp<'a, 'b>(
-    f: impl Fn(&Bisimulation<'a, 'b>) -> Bisimulation<'a, 'b>,
-    mut curr: Bisimulation<'a, 'b>,
-) -> Bisimulation<'a, 'b> {
+fn gfp<R: PartialEq>(f: impl Fn(&R) -> R, mut curr: R) -> R {
     loop {
         let new = f(&curr);
-        if new.len() == curr.len() {
-            break curr;
+        if new == curr {
+            return curr;
         }
         curr = new;
     }

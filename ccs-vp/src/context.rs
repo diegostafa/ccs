@@ -47,7 +47,6 @@ impl Context {
                 || field == Self::BOOL_TY
                 || self.enums.contains_key(field)
                 || self.aliases.contains_key(field)));
-
         self.enums.insert(ty, tags);
     }
     pub fn bind_process(&mut self, name: String, p: (Vec<String>, Process)) {
@@ -127,5 +126,10 @@ impl From<Program> for Context {
         }
         ctx.gen_values();
         ctx
+    }
+}
+impl From<String> for Context {
+    fn from(value: String) -> Self {
+        Self::from(Program::parse(&value).unwrap())
     }
 }

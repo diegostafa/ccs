@@ -19,7 +19,13 @@ pub fn print_bisimulation(b: &Bisimulation) {
     draw_table(
         vec!["State", "", "State"],
         b.iter()
-            .map(|(s1, s2)| vec![format!("{s1}"), format!("~"), format!("{s2}")])
+            .map(|(s1, s2)| {
+                if s1 == s2 {
+                    vec![format!("{s1}"), format!("="), format!("{s2}")]
+                } else {
+                    vec![format!("{s1}"), format!("~"), format!("{s2}")]
+                }
+            })
             .collect(),
     );
 }

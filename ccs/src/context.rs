@@ -9,6 +9,9 @@ pub struct Context {
     constants: HashMap<String, Process>,
 }
 impl Context {
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub fn constants(&self) -> &HashMap<String, Process> {
         &self.constants
     }
@@ -37,5 +40,10 @@ impl From<Program> for Context {
             }
         }
         ctx
+    }
+}
+impl From<String> for Context {
+    fn from(value: String) -> Self {
+        Self::from(Program::parse(&value).unwrap())
     }
 }
