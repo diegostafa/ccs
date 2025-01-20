@@ -8,7 +8,7 @@ fn main() {
     for c in ctx_ccs.constants() {
         println!("{:?}", c);
     }
-    let lts = ctx_ccs.to_lts();
+    let lts = ctx_ccs.to_lts().flatten();
     print_transitions(&lts);
     println!("bisimilarity: ");
     let bimilarity = lts.bisimilarity(&lts);

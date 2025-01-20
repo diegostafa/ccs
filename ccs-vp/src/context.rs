@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use ccs::context::Context as ContextCcs;
+use itertools::Itertools;
 
 use super::ast::{Command, Program, Statement};
 use super::process::Process;
@@ -16,9 +17,10 @@ pub struct Context {
     cached_values: HashMap<String, Vec<Value>>,
 }
 impl Context {
-    pub const MAIN: &str = "main";
-    pub const INT_TY: &str = "int";
-    pub const BOOL_TY: &str = "bool";
+    const MAIN: &'static str = "main";
+    const INT_TY: &'static str = "int";
+    const BOOL_TY: &'static str = "bool";
+    const ANY_TY: &'static str = "any";
 
     pub fn types(&self) -> Vec<String> {
         [Self::INT_TY.to_string(), Self::BOOL_TY.to_string()]
@@ -27,23 +29,71 @@ impl Context {
             .chain(self.aliases.keys().cloned())
             .collect()
     }
+    pub fn type_of<'a>(&self, v: &'a Value) -> &'a str {
+        match v {
+            Value::AExpr(_) => Self::INT_TY,
+            Value::BExpr(_) => Self::BOOL_TY,
+            Value::Enum(name, ..) => name.as_str(),
+            Value::Any(_) => Self::ANY_TY,
+        }
+    }
+
+    pub fn enums(&self) -> &HashMap<String, Vec<(String, Vec<String>)>> {
+        &self.enums
+    }
     pub fn constants(&self) -> &HashMap<String, (Vec<String>, Process)> {
         &self.constants
     }
 
     pub fn to_ccs(&self) -> ContextCcs {
+        fn gen_constants(p: &Process, ctx: &Context, ccs_ctx: &mut ContextCcs) {
+            match p {
+                Process::Constant(name, vals) => {
+                    let vals = vals.iter().map(|v| v.eval(ctx)).collect_vec();
+                    let (vars, mut body) = ctx.get_process(name).unwrap().clone();
+                    if !vars
+                        .iter()
+                        .zip(vals.iter())
+                        .all(|(var, val)| body.try_replace(var, val))
+                    {
+                        panic!("[error] failed to replace {vars:?} with {vals:?}");
+                    }
+
+                    let name = name.clone() + "#" + &vals.iter().join("#");
+                    if ccs_ctx.get_process(&name).is_none() {
+                        ccs_ctx.bind_process(name, body.clone().to_ccs(ctx).flatten());
+                        gen_constants(&body, ctx, ccs_ctx);
+                    }
+                }
+                Process::Action(_, p) => gen_constants(p, ctx, ccs_ctx),
+                Process::Sum(sum) => sum.iter().for_each(|p| gen_constants(p, ctx, ccs_ctx)),
+                Process::Par(p, q) => {
+                    gen_constants(p, ctx, ccs_ctx);
+                    gen_constants(q, ctx, ccs_ctx);
+                }
+                Process::IfThen(b, p) => {
+                    if b.eval(ctx) {
+                        gen_constants(p, ctx, ccs_ctx)
+                    }
+                }
+                Process::Restriction(p, _) => gen_constants(p, ctx, ccs_ctx),
+                Process::Substitution(p, _) => gen_constants(p, ctx, ccs_ctx),
+            }
+        }
         let main = self.get_process(Context::MAIN).unwrap();
         let mut ccs_ctx = ContextCcs::default();
         ccs_ctx.bind_process(Context::MAIN.to_string(), main.1.clone().to_ccs(self));
-        main.1.gen_constants(self, &mut ccs_ctx);
+        gen_constants(&main.1, self, &mut ccs_ctx);
         ccs_ctx
     }
 
     pub fn bind_enum(&mut self, ty: String, tags: Vec<(String, Vec<String>)>) {
+        assert_ne!(ty, Self::ANY_TY);
         assert!(tags
             .iter()
             .flat_map(|(_, fields)| fields)
-            .all(|field| *field != ty && field == Self::INT_TY
+            .all(|field| *field != ty && field != Self::ANY_TY
+                || field == Self::INT_TY
                 || field == Self::BOOL_TY
                 || self.enums.contains_key(field)
                 || self.aliases.contains_key(field)));

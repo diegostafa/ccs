@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use ccs::context::Context as ContextCcs;
 use ccs::process::{Channel as ChannelCcs, Process as ProcessCcs, Substitution};
 use itertools::Itertools;
 
@@ -33,40 +32,6 @@ impl Process {
             Process::Substitution(p, _) => p.try_replace(var, val),
         }
     }
-    pub fn gen_constants(&self, ctx: &Context, ccs_ctx: &mut ContextCcs) {
-        match self {
-            Process::Constant(name, vals) => {
-                let vals = vals.iter().map(|v| v.eval(ctx)).collect_vec();
-                let (vars, mut body) = ctx.get_process(name).unwrap().clone();
-                if !vars
-                    .iter()
-                    .zip(vals.iter())
-                    .all(|(var, val)| body.try_replace(var, val))
-                {
-                    panic!("[error] failed to replace {vars:?} with {vals:?}");
-                }
-
-                let name = name.clone() + "#" + &vals.iter().join("#");
-                if ccs_ctx.get_process(&name).is_none() {
-                    ccs_ctx.bind_process(name, body.clone().to_ccs(ctx));
-                    body.gen_constants(ctx, ccs_ctx);
-                }
-            }
-            Process::Action(_, p) => p.gen_constants(ctx, ccs_ctx),
-            Process::Sum(sum) => sum.iter().for_each(|p| p.gen_constants(ctx, ccs_ctx)),
-            Process::Par(p, q) => {
-                p.gen_constants(ctx, ccs_ctx);
-                q.gen_constants(ctx, ccs_ctx);
-            }
-            Process::IfThen(b, p) => {
-                if b.eval(ctx) {
-                    p.gen_constants(ctx, ccs_ctx)
-                }
-            }
-            Process::Restriction(p, _) => p.gen_constants(ctx, ccs_ctx),
-            Process::Substitution(p, _) => p.gen_constants(ctx, ccs_ctx),
-        }
-    }
     pub fn to_ccs(self, ctx: &Context) -> ProcessCcs {
         match self {
             Process::Constant(name, vals) => {
@@ -97,14 +62,7 @@ impl Process {
                     ProcessCcs::sum(possibles)
                 }
             },
-            Process::Sum(sum) => ProcessCcs::sum(
-                sum.into_iter()
-                    .filter_map(|p| match p.to_ccs(ctx) {
-                        ProcessCcs::Sum(sum) if sum.is_empty() => None,
-                        p => Some(p),
-                    })
-                    .collect(),
-            ),
+            Process::Sum(sum) => ProcessCcs::sum(sum.into_iter().map(|p| p.to_ccs(ctx)).collect()),
             Process::Par(p, q) => ProcessCcs::par(p.to_ccs(ctx), q.to_ccs(ctx)),
             Process::IfThen(b, p) => {
                 if b.eval(ctx) {

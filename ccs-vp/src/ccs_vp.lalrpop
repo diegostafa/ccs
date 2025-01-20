@@ -63,7 +63,7 @@ ChannelNode: Channel = {
 }
 
 ValueNode: Value = {
-    <x:Ident> => Value::Var(x),
+    <x:Ident> => Value::Any(x),
     <x:AExprNode> => Value::AExpr(x),
     <x:BExprNode> => Value::BExpr(x),
     <ty:Ident> "::" <tag:Ident> => Value::Enum(ty, tag, vec![]),

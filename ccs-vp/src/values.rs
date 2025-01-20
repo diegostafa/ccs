@@ -9,14 +9,35 @@ pub enum Value {
     AExpr(AExpr),
     BExpr(BExpr),
     Enum(String, String, Vec<Value>),
-    Var(String),
+    Any(String),
 }
 impl Value {
     pub fn eval(&self, ctx: &Context) -> Self {
         match self {
             Value::AExpr(e) => Value::AExpr(AExpr::Lit(e.eval(ctx))),
             Value::BExpr(e) => Value::BExpr(BExpr::Lit(e.eval(ctx))),
-            Value::Enum(..) | Value::Var(..) => self.clone(),
+            Value::Enum(ty, tag, vals) => {
+                let types = &ctx
+                    .enums()
+                    .iter()
+                    .find(|t| t.0 == ty)
+                    .unwrap()
+                    .1
+                    .iter()
+                    .find(|t| t.0 == *tag)
+                    .unwrap()
+                    .1;
+                assert_eq!(vals.len(), types.len());
+                for (v, t) in vals.iter().zip(types.iter()) {
+                    assert_eq!(ctx.type_of(v), t);
+                }
+                Value::Enum(
+                    ty.clone(),
+                    tag.clone(),
+                    vals.iter().map(|v| v.eval(ctx)).collect(),
+                )
+            }
+            Value::Any(..) => self.clone(),
         }
     }
     pub fn try_replace(&mut self, var: &str, val: &Value) -> bool {
@@ -24,7 +45,7 @@ impl Value {
             Value::AExpr(e) => e.try_replace(var, val),
             Value::BExpr(e) => e.try_replace(var, val),
             Value::Enum(_, _, vals) => vals.iter_mut().all(|v| v.try_replace(var, val)),
-            Value::Var(name) => {
+            Value::Any(name) => {
                 if var == name {
                     *self = val.clone();
                 }
@@ -37,8 +58,8 @@ impl Value {
             + &match self {
                 Value::AExpr(e) => e.to_string(),
                 Value::BExpr(e) => e.to_string(),
-                Value::Enum(ty, tag, vals) => ty.clone() + "::" + tag + &vals.iter().join("|"),
-                Value::Var(name) => name.clone(),
+                Value::Enum(ty, tag, vals) => ty.clone() + "::" + tag + &vals.iter().join(":"),
+                Value::Any(name) => name.clone(),
             }
     }
 }
@@ -54,7 +75,7 @@ impl Display for Value {
                     write!(f, "{ty}::{tag}({})", vals.iter().join(","))
                 }
             }
-            Value::Var(name) => write!(f, "{name}"),
+            Value::Any(name) => write!(f, "{name}"),
         }
     }
 }
