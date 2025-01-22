@@ -8,7 +8,7 @@ use super::context::Context;
 pub enum Value {
     AExpr(AExpr),
     BExpr(BExpr),
-    Enum(String, String, Vec<Value>),
+    Enum(Enum),
     Any(String),
 }
 impl Value {
@@ -16,27 +16,7 @@ impl Value {
         match self {
             Value::AExpr(e) => Value::AExpr(AExpr::Lit(e.eval(ctx))),
             Value::BExpr(e) => Value::BExpr(BExpr::Lit(e.eval(ctx))),
-            Value::Enum(ty, tag, vals) => {
-                let types = &ctx
-                    .enums()
-                    .iter()
-                    .find(|t| t.0 == ty)
-                    .unwrap()
-                    .1
-                    .iter()
-                    .find(|t| t.0 == *tag)
-                    .unwrap()
-                    .1;
-                assert_eq!(vals.len(), types.len());
-                for (v, t) in vals.iter().zip(types.iter()) {
-                    assert_eq!(ctx.type_of(v), t);
-                }
-                Value::Enum(
-                    ty.clone(),
-                    tag.clone(),
-                    vals.iter().map(|v| v.eval(ctx)).collect(),
-                )
-            }
+            Value::Enum(e) => Value::Enum(e.eval(ctx)),
             Value::Any(..) => self.clone(),
         }
     }
@@ -44,9 +24,9 @@ impl Value {
         match self {
             Value::AExpr(e) => e.try_replace(var, val),
             Value::BExpr(e) => e.try_replace(var, val),
-            Value::Enum(_, _, vals) => vals.iter_mut().all(|v| v.try_replace(var, val)),
-            Value::Any(name) => {
-                if var == name {
+            Value::Enum(e) => e.try_replace(var, val),
+            Value::Any(x) => {
+                if x == var {
                     *self = val.clone();
                 }
                 true
@@ -58,8 +38,8 @@ impl Value {
             + &match self {
                 Value::AExpr(e) => e.to_string(),
                 Value::BExpr(e) => e.to_string(),
-                Value::Enum(ty, tag, vals) => ty.clone() + "::" + tag + &vals.iter().join(":"),
-                Value::Any(name) => name.clone(),
+                Value::Enum(e) => e.to_string(),
+                Value::Any(e) => e.to_string(),
             }
     }
 }
@@ -68,14 +48,8 @@ impl Display for Value {
         match self {
             Value::AExpr(e) => write!(f, "{e}"),
             Value::BExpr(e) => write!(f, "{e}"),
-            Value::Enum(ty, tag, vals) => {
-                if vals.is_empty() {
-                    write!(f, "{ty}::{tag}")
-                } else {
-                    write!(f, "{ty}::{tag}({})", vals.iter().join(","))
-                }
-            }
-            Value::Any(name) => write!(f, "{name}"),
+            Value::Enum(e) => write!(f, "{e}"),
+            Value::Any(e) => write!(f, "{e}"),
         }
     }
 }
@@ -104,9 +78,9 @@ impl AExpr {
     }
     fn try_replace(&mut self, var: &str, val: &Value) -> bool {
         match self {
-            AExpr::Var(name) => {
+            AExpr::Var(x) => {
                 if let Value::AExpr(e) = val {
-                    if var == name {
+                    if var == x {
                         *self = e.clone();
                     }
                     true
@@ -147,6 +121,7 @@ pub enum BExpr {
     NumGt(AExpr, AExpr),
     NumLtEq(AExpr, AExpr),
     NumGtEq(AExpr, AExpr),
+    EnumIs(Enum, Enum),
 }
 impl BExpr {
     pub fn eval(&self, ctx: &Context) -> bool {
@@ -163,6 +138,7 @@ impl BExpr {
             BExpr::NumGt(l, r) => l.eval(ctx) > r.eval(ctx),
             BExpr::NumLtEq(l, r) => l.eval(ctx) <= r.eval(ctx),
             BExpr::NumGtEq(l, r) => l.eval(ctx) >= r.eval(ctx),
+            BExpr::EnumIs(l, r) => l.eval(ctx) == r.eval(ctx),
         }
     }
     pub fn try_replace(&mut self, var: &str, val: &Value) -> bool {
@@ -188,6 +164,7 @@ impl BExpr {
             | BExpr::NumGt(l, r)
             | BExpr::NumLtEq(l, r)
             | BExpr::NumGtEq(l, r) => l.try_replace(var, val) && r.try_replace(var, val),
+            BExpr::EnumIs(l, r) => l.try_replace(var, val) && r.try_replace(var, val),
         }
     }
 }
@@ -205,6 +182,70 @@ impl Display for BExpr {
             BExpr::NumGt(l, r) => write!(f, "({l} > {r})"),
             BExpr::NumLtEq(l, r) => write!(f, "({l} <= {r})"),
             BExpr::NumGtEq(l, r) => write!(f, "({l} >= {r})"),
+            BExpr::EnumIs(l, r) => write!(f, "({l} is {r})"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Enum {
+    Var(String),
+    Lit(String, String, Vec<Value>),
+}
+impl Enum {
+    pub fn eval(&self, ctx: &Context) -> Self {
+        match self {
+            Enum::Var(_) => todo!(),
+            Enum::Lit(ty, tag, vals) => {
+                let types = &ctx
+                    .enums()
+                    .iter()
+                    .find(|t| t.0 == ty)
+                    .unwrap()
+                    .1
+                    .iter()
+                    .find(|t| t.0 == *tag)
+                    .unwrap()
+                    .1;
+                assert_eq!(vals.len(), types.len());
+                for (v, t) in vals.iter().zip(types.iter()) {
+                    assert_eq!(ctx.type_of(v), t);
+                }
+                Self::Lit(
+                    ty.clone(),
+                    tag.clone(),
+                    vals.iter().map(|v| v.eval(ctx)).collect(),
+                )
+            }
+        }
+    }
+    pub fn try_replace(&mut self, var: &str, val: &Value) -> bool {
+        match self {
+            Enum::Var(x) => {
+                if let Value::Enum(e) = val {
+                    if var == x {
+                        *self = e.clone();
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            Enum::Lit(_, _, vals) => vals.iter_mut().all(|v| v.try_replace(var, val)),
+        }
+    }
+}
+impl Display for Enum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Enum::Var(x) => write!(f, "enum::{x}"),
+            Enum::Lit(ty, tag, vals) => {
+                if vals.is_empty() {
+                    write!(f, "{}::{}", ty, tag)
+                } else {
+                    write!(f, "{}::{}({})", ty, tag, vals.iter().join(","))
+                }
+            }
         }
     }
 }

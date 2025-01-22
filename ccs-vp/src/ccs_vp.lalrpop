@@ -66,8 +66,11 @@ ValueNode: Value = {
     <x:Ident> => Value::Any(x),
     <x:AExprNode> => Value::AExpr(x),
     <x:BExprNode> => Value::BExpr(x),
-    <ty:Ident> "::" <tag:Ident> => Value::Enum(ty, tag, vec![]),
-    <ty:Ident> "::" <tag:Ident> "(" <vals:ValList> ")"=> Value::Enum(ty, tag, vals),
+    <x:EnumNode> => Value::Enum(x),
+}
+EnumNode: Enum = {
+    <ty:Ident> "::" <tag:Ident> => Enum::Lit(ty, tag, vec![]),
+    <ty:Ident> "::" <tag:Ident> "(" <vals:ValList> ")"=> Enum::Lit(ty, tag, vals),
 }
 AExprNode: AExpr = {
     #[precedence(level="1")]
@@ -142,6 +145,12 @@ BExprNode: BExpr = {
     "(" <l:Ident> ">"  <r:Ident> ")" => BExpr::NumGt(AExpr::Var(l), AExpr::Var(r)),
     "(" <l:Ident> "<=" <r:Ident> ")" => BExpr::NumLtEq(AExpr::Var(l), AExpr::Var(r)),
     "(" <l:Ident> ">=" <r:Ident> ")" => BExpr::NumGtEq(AExpr::Var(l), AExpr::Var(r)),
+
+
+    "(" <l:EnumNode> "is" <r:EnumNode> ")" => BExpr::EnumIs(l, r),
+    "(" <l:Ident> "is" <r:EnumNode> ")" => BExpr::EnumIs(Enum::Var(l), r),
+    "(" <l:Ident> "is" <r:Ident> ")" => BExpr::EnumIs(Enum::Var(l),Enum::Var(r)),
+
 }
 
 pub StatementList: Vec<Statement> = {

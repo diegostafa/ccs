@@ -7,6 +7,7 @@ use super::ast::{Command, Program, Statement};
 use super::process::Process;
 use super::values::{AExpr, BExpr, Value};
 use crate::utils::permute;
+use crate::values::Enum;
 
 #[derive(Debug, Clone, Default)]
 pub struct Context {
@@ -33,7 +34,8 @@ impl Context {
         match v {
             Value::AExpr(_) => Self::INT_TY,
             Value::BExpr(_) => Self::BOOL_TY,
-            Value::Enum(name, ..) => name.as_str(),
+            Value::Enum(Enum::Var(_)) => panic!(),
+            Value::Enum(Enum::Lit(ty, ..)) => ty.as_str(),
             Value::Any(_) => Self::ANY_TY,
         }
     }
@@ -138,12 +140,12 @@ impl Context {
             let mut values = vec![];
             for (tag, fields) in tags {
                 if fields.is_empty() {
-                    values.push(Value::Enum(ty.to_string(), tag.clone(), vec![]));
+                    values.push(Value::Enum(Enum::Lit(ty.to_string(), tag.clone(), vec![])));
                     continue;
                 }
                 let tag_field_vals = fields.iter().map(|f| self.values_of(f)).collect();
                 for perm in permute(tag_field_vals) {
-                    values.push(Value::Enum(ty.to_string(), tag.clone(), perm));
+                    values.push(Value::Enum(Enum::Lit(ty.to_string(), tag.clone(), perm)));
                 }
             }
             return values;
