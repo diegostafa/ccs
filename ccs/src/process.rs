@@ -21,6 +21,7 @@ impl Process {
     pub fn is_nil(&self) -> bool {
         match self {
             Process::Sum(sum) => sum.is_empty(),
+            Process::Par(p, q) => p.is_nil() && q.is_nil(),
             _ => false,
         }
     }
@@ -48,24 +49,24 @@ impl Process {
 
     pub fn flatten(self) -> Self {
         match self {
-            Process::Constant(_) => self,
-            Process::Action(ch, p) => Process::action(ch, p.flatten()),
-            Process::Sum(sum) => {
+            Self::Constant(_) => self,
+            Self::Action(ch, p) => Self::action(ch, p.flatten()),
+            Self::Sum(sum) => {
                 let sum = sum
                     .into_iter()
-                    .map(Process::flatten)
+                    .map(Self::flatten)
                     .filter(|p| !p.is_nil())
                     .collect_vec();
                 if sum.len() == 1 {
                     return sum[0].clone();
                 }
-                Process::sum(sum)
+                Self::sum(sum)
             }
-            Process::Par(p, q) => {
+            Self::Par(p, q) => {
                 let p = p.flatten();
                 let q = q.flatten();
                 if p.is_nil() && q.is_nil() {
-                    return Process::nil();
+                    return Self::nil();
                 }
                 if p.is_nil() {
                     return q;
@@ -73,43 +74,55 @@ impl Process {
                 if q.is_nil() {
                     return p;
                 }
-                Process::par(p, q)
+                Self::par(p, q)
             }
-            Process::Substitution(p, subs) => Process::substitution(p.flatten(), subs),
-            Process::Restriction(p, chans) => Process::restriction(p.flatten(), chans),
+            Self::Substitution(p, subs) => Self::substitution(p.flatten(), subs),
+            Self::Restriction(p, chans) => Self::restriction(p.flatten(), chans),
         }
     }
-
+    pub fn fold_consts(self, ctx: &Context) -> Self {
+        let p = match self {
+            Self::Constant(name) => Self::Constant(name),
+            Self::Action(ch, p) => Self::action(ch, p.fold_consts(ctx)),
+            Self::Sum(sum) => Self::sum(sum.into_iter().map(|p| p.fold_consts(ctx)).collect()),
+            Self::Par(p, q) => Self::par(p.fold_consts(ctx), q.fold_consts(ctx)),
+            Self::Substitution(p, s) => Self::substitution(p.fold_consts(ctx), s),
+            Self::Restriction(p, r) => Self::restriction(p.fold_consts(ctx), r),
+        };
+        ctx.process_to_const(&p).unwrap_or(p)
+    }
     pub fn unfold_consts(self, ctx: &Context) -> Self {
+        fn unfold_rec(p: Process, ctx: &Context, seen: &mut HashSet<String>) -> Process {
+            match p {
+                Process::Constant(name) => {
+                    if seen.contains(&name) {
+                        return Process::Constant(name);
+                    }
+                    seen.insert(name.clone());
+                    let p = unfold_rec(ctx.get_process(&name).unwrap().clone(), ctx, seen);
+                    seen.remove(&name);
+                    p
+                }
+                Process::Action(ch, p) => Process::action(ch, unfold_rec(*p, ctx, seen)),
+                Process::Sum(sum) => {
+                    Process::sum(sum.into_iter().map(|p| unfold_rec(p, ctx, seen)).collect())
+                }
+                Process::Par(p, q) => {
+                    Process::par(unfold_rec(*p, ctx, seen), unfold_rec(*q, ctx, seen))
+                }
+                Process::Substitution(p, subs) => {
+                    Process::substitution(unfold_rec(*p, ctx, seen), subs)
+                }
+                Process::Restriction(p, chans) => {
+                    Process::restriction(unfold_rec(*p, ctx, seen), chans)
+                }
+            }
+        }
         let mut seen = HashSet::new();
         if let Some(name) = ctx.name_of(&self) {
             seen.insert(name.to_string());
         }
-        self.unfold_rec(ctx, &mut seen)
-    }
-    fn unfold_rec(self, ctx: &Context, seen: &mut HashSet<String>) -> Process {
-        match self {
-            Process::Constant(name) => {
-                if seen.contains(&name) {
-                    return Process::Constant(name);
-                }
-                seen.insert(name.clone());
-                let p = ctx
-                    .get_process(&name)
-                    .unwrap()
-                    .clone()
-                    .unfold_rec(ctx, seen);
-                seen.remove(&name);
-                p
-            }
-            Process::Action(ch, p) => Process::action(ch, p.unfold_rec(ctx, seen)),
-            Process::Sum(sum) => {
-                Process::sum(sum.into_iter().map(|p| p.unfold_rec(ctx, seen)).collect())
-            }
-            Process::Par(p, q) => Process::par(p.unfold_rec(ctx, seen), q.unfold_rec(ctx, seen)),
-            Process::Substitution(p, subs) => Process::substitution(p.unfold_rec(ctx, seen), subs),
-            Process::Restriction(p, chans) => Process::restriction(p.unfold_rec(ctx, seen), chans),
-        }
+        unfold_rec(self, ctx, &mut seen)
     }
 
     pub fn derive_lts(self, ctx: &Context) -> Lts {
@@ -122,9 +135,8 @@ impl Process {
                 transitions.extend(t.2.derive());
             }
         }
-        Lts::new(transitions.into_iter().map(|t| (t.0, t.1, t.2)).collect())
+        Lts::new(transitions)
     }
-
     fn derive(&self) -> HashSet<Transition> {
         match self {
             Process::Constant(_) => Default::default(),
@@ -193,7 +205,7 @@ impl Process {
 impl Display for Process {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Process::Constant(k) => write!(f, "{}()", k),
+            Process::Constant(k) => write!(f, "{}", k),
             Process::Action(ch, p) => write!(f, "{}.{}", ch, p),
             Process::Sum(procs) => {
                 if procs.is_empty() {
@@ -280,27 +292,26 @@ pub enum Channel {
 impl Channel {
     pub fn name(&self) -> &str {
         match self {
-            Channel::Send(s) | Channel::Recv(s) => s,
-            Channel::Tau => "tau",
+            Self::Send(s) | Self::Recv(s) => s,
+            Self::Tau => "tau",
         }
     }
-
-    pub fn send(s: &str) -> Channel {
-        Channel::Send(s.into())
+    pub fn send(s: &str) -> Self {
+        Self::Send(s.into())
     }
-    pub fn recv(s: &str) -> Channel {
-        Channel::Recv(s.into())
+    pub fn recv(s: &str) -> Self {
+        Self::Recv(s.into())
     }
-    pub fn tau() -> Channel {
-        Channel::Tau
+    pub fn tau() -> Self {
+        Self::Tau
     }
     pub fn is_tau(&self) -> bool {
-        self == &Channel::Tau
+        self == &Self::Tau
     }
-    pub fn is_synched_with(&self, other: &Channel) -> bool {
+    pub fn is_synched_with(&self, other: &Self) -> bool {
         match (self, other) {
-            (Channel::Send(a), Channel::Recv(b)) | (Channel::Recv(a), Channel::Send(b)) => *a == *b,
-            (Channel::Tau, Channel::Tau) => true,
+            (Self::Send(a), Self::Recv(b)) | (Self::Recv(a), Self::Send(b)) => *a == *b,
+            (Self::Tau, Self::Tau) => true,
             _ => false,
         }
     }

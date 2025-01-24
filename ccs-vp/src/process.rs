@@ -130,7 +130,11 @@ impl Display for Process {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Process::Constant(k, vals) => {
-                write!(f, "{k}({})", vals.iter().map(|v| format!("{v}")).join(","))
+                if vals.is_empty() {
+                    write!(f, "{k}")
+                } else {
+                    write!(f, "{k}({})", vals.iter().map(|v| format!("{v}")).join(","))
+                }
             }
             Process::Action(ch, p) => {
                 write!(f, "{ch}; {p}")

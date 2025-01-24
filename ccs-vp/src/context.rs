@@ -88,7 +88,6 @@ impl Context {
         gen_constants(&main.1, self, &mut ccs_ctx);
         ccs_ctx
     }
-
     pub fn bind_enum(&mut self, ty: String, tags: Vec<(String, Vec<String>)>) {
         assert_ne!(ty, Self::ANY_TY);
         assert!(tags

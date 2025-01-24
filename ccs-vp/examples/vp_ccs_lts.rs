@@ -6,7 +6,7 @@ fn main() {
     let vp = ContextVp::from(file);
     let ctx_ccs = vp.to_ccs();
     for c in ctx_ccs.constants() {
-        println!("{:?}", c);
+        println!("let {} = {}", c.0, c.1);
     }
     let lts = ctx_ccs.to_lts().flatten();
     print_transitions(&lts);

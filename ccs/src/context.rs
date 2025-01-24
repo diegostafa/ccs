@@ -21,6 +21,9 @@ impl Context {
     pub fn get_process(&self, name: &str) -> Option<&Process> {
         self.constants.get(name)
     }
+    pub fn process_to_const(&self, p: &Process) -> Option<Process> {
+        self.name_of(p).map(Process::constant)
+    }
     pub fn name_of(&self, p: &Process) -> Option<&str> {
         self.constants
             .iter()

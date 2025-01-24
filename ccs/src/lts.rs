@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use itertools::Itertools;
 
 use super::process::{Channel, Process};
+use crate::context::Context;
 
 pub type Transition = (Process, Channel, Process);
 pub type Bisimulation<'a, 'b> = HashSet<(&'a Process, &'b Process)>;
@@ -40,6 +41,14 @@ impl Lts {
             self.0
                 .into_iter()
                 .map(|t| (t.0.flatten(), t.1, t.2.flatten()))
+                .collect(),
+        )
+    }
+    pub fn symbolic(self, ctx: Context) -> Self {
+        Self(
+            self.0
+                .into_iter()
+                .map(|t| (t.0.fold_consts(&ctx), t.1, t.2.fold_consts(&ctx)))
                 .collect(),
         )
     }
