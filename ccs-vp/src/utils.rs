@@ -4,7 +4,7 @@ pub fn print_values(ctx: Context) {
     for ty in ctx.types() {
         println!("-------- {}:", ty);
         for val in ctx.values_of(&ty) {
-            println!("{}", val);
+            println!("{val}");
         }
     }
 }
