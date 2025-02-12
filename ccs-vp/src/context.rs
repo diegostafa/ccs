@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ccs::context::Context as ContextCcs;
-use itertools::Itertools;
+use lalrpop_util::lexer::Token;
+use lalrpop_util::ParseError;
 
 use super::ast::{Command, Program, Statement};
 use super::process::Process;
@@ -48,45 +49,9 @@ impl Context {
     }
 
     pub fn to_ccs(&self) -> ContextCcs {
-        fn gen_constants(p: &Process, ctx: &Context, ccs_ctx: &mut ContextCcs) {
-            match p {
-                Process::Constant(name, vals) => {
-                    let vals = vals.iter().map(|v| v.eval(ctx)).collect_vec();
-                    let (vars, mut body) = ctx.get_process(name).unwrap().clone();
-                    if !vars
-                        .iter()
-                        .zip(vals.iter())
-                        .all(|(var, val)| body.try_replace(var, val))
-                    {
-                        panic!("[error] failed to replace {vars:?} with {vals:?}");
-                    }
-
-                    let name = name.clone() + "#" + &vals.iter().join("#");
-                    if ccs_ctx.get_process(&name).is_none() {
-                        ccs_ctx.bind_process(name, body.clone().to_ccs(ctx).flatten());
-                        gen_constants(&body, ctx, ccs_ctx);
-                    }
-                }
-                Process::Action(_, p) => gen_constants(p, ctx, ccs_ctx),
-                Process::Sum(sum) => sum.iter().for_each(|p| gen_constants(p, ctx, ccs_ctx)),
-                Process::Par(p, q) => {
-                    gen_constants(p, ctx, ccs_ctx);
-                    gen_constants(q, ctx, ccs_ctx);
-                }
-                Process::IfThen(b, p) => {
-                    if b.eval(ctx) {
-                        gen_constants(p, ctx, ccs_ctx)
-                    }
-                }
-                Process::Restriction(p, _) => gen_constants(p, ctx, ccs_ctx),
-                Process::Substitution(p, _) => gen_constants(p, ctx, ccs_ctx),
-            }
-        }
-        let main = self.get_process(Context::MAIN).unwrap();
-        let mut ccs_ctx = ContextCcs::default();
-        ccs_ctx.bind_process(Context::MAIN.to_string(), main.1.clone().to_ccs(self));
-        gen_constants(&main.1, self, &mut ccs_ctx);
-        ccs_ctx
+        let mut ccs = ContextCcs::default();
+        Process::constant(Self::MAIN, vec![]).to_ccs(self, &mut ccs, &mut HashSet::new());
+        ccs
     }
     pub fn bind_enum(&mut self, ty: String, tags: Vec<(String, Vec<String>)>) {
         assert_ne!(ty, Self::ANY_TY);
@@ -179,8 +144,9 @@ impl From<Program> for Context {
         ctx
     }
 }
-impl From<String> for Context {
-    fn from(value: String) -> Self {
-        Self::from(Program::parse(&value).unwrap())
+impl<'a> TryFrom<&'a str> for Context {
+    type Error = ParseError<usize, Token<'a>, &'static str>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        Ok(Self::from(Program::try_from(value)?))
     }
 }

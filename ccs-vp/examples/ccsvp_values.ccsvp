@@ -1,0 +1,17 @@
+#![bounds(0..4)]
+
+type Id = int;
+type Value = int;
+
+enum Unit { Unit }
+enum Color { Red, Green, Blue }
+enum IntPair { Pair(int, int) }
+enum BoolPair { Pair(bool, bool) }
+enum RandomList { List(int, bool, Unit, Color, IntPair) }
+
+fn main() {
+    send!(BoolPair::Pair(true,false));
+    send!(RandomList::List(0, false, Unit::Unit, Color::Red, IntPair::Pair(1, 1)));
+    nil
+}
+

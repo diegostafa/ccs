@@ -33,15 +33,6 @@ impl Value {
             }
         }
     }
-    pub fn mangle(&self, s: String) -> String {
-        s + "#"
-            + &match self {
-                Value::AExpr(e) => e.to_string(),
-                Value::BExpr(e) => e.to_string(),
-                Value::Enum(e) => e.to_string(),
-                Value::Any(e) => e.to_string(),
-            }
-    }
 }
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -73,7 +64,7 @@ impl AExpr {
             AExpr::Mul(l, r) => l.eval(ctx) * r.eval(ctx),
             AExpr::Div(l, r) => l.eval(ctx) / r.eval(ctx),
         };
-        assert!(n >= ctx.bounds().0 && n <= ctx.bounds().1);
+        assert!(n >= ctx.bounds().0 && n < ctx.bounds().1);
         n
     }
     fn try_replace(&mut self, var: &str, val: &Value) -> bool {

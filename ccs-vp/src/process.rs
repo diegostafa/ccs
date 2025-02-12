@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 
+use ccs::context::Context as ContextCcs;
 use ccs::process::{Channel as ChannelCcs, Process as ProcessCcs, Substitution};
 use itertools::Itertools;
 
@@ -16,8 +18,101 @@ pub enum Process {
     Substitution(Box<Process>, Substitution),
     IfThen(BExpr, Box<Process>),
 }
+
 impl Process {
-    pub fn try_replace(&mut self, var: &str, val: &Value) -> bool {
+    pub fn to_ccs(
+        self,
+        ctx: &Context,
+        ccs: &mut ContextCcs,
+        seen: &mut HashSet<String>,
+    ) -> ProcessCcs {
+        match self {
+            Process::Constant(name, vals) => {
+                let vals = vals.iter().map(|v| v.eval(ctx)).collect_vec();
+                let encoded = encode_constant(name.to_string(), &vals);
+                if seen.contains(&encoded) {
+                    return ProcessCcs::constant(encoded);
+                }
+                let (vars, mut body) = ctx
+                    .get_process(&name)
+                    .unwrap_or_else(|| panic!("[error] constant {name} not found"))
+                    .clone();
+                if !vars
+                    .iter()
+                    .zip(vals.iter())
+                    .all(|(var, val)| body.try_replace(var, val))
+                {
+                    panic!("[error] failed to replace {vars:?} with {vals:?}");
+                }
+                seen.insert(encoded.clone());
+                let body = body.clone().to_ccs(ctx, ccs, seen).flatten();
+                ccs.bind_process(encoded.clone(), body);
+                seen.remove(&encoded);
+                ProcessCcs::constant(encoded)
+            }
+            Process::Action(ch, p) => match ch {
+                Channel::Tau => ProcessCcs::action(ChannelCcs::Tau, p.to_ccs(ctx, ccs, seen)),
+                Channel::Recv(name, None) => {
+                    ProcessCcs::action(ChannelCcs::Recv(name), p.to_ccs(ctx, ccs, seen))
+                }
+                Channel::Send(name, None) => {
+                    ProcessCcs::action(ChannelCcs::Send(name), p.to_ccs(ctx, ccs, seen))
+                }
+                Channel::Send(name, Some(e)) => ProcessCcs::action(
+                    ChannelCcs::Send(encode_action(name, &e.eval(ctx))),
+                    p.to_ccs(ctx, ccs, seen),
+                ),
+                Channel::Recv(name, Some(var)) => {
+                    let mut possibles = vec![];
+                    for val in ctx.values() {
+                        let mut p = p.clone();
+                        if p.try_replace(&var, &val) {
+                            possibles.push(ProcessCcs::action(
+                                ChannelCcs::Recv(encode_action(name.clone(), &val.eval(ctx))),
+                                p.to_ccs(ctx, ccs, seen),
+                            ));
+                        }
+                    }
+                    ProcessCcs::sum(possibles)
+                }
+            },
+            Process::Sum(sum) => {
+                ProcessCcs::sum(sum.into_iter().map(|p| p.to_ccs(ctx, ccs, seen)).collect())
+            }
+            Process::Par(p, q) => {
+                ProcessCcs::par(p.to_ccs(ctx, ccs, seen), q.to_ccs(ctx, ccs, seen))
+            }
+            Process::IfThen(b, p) => {
+                if b.eval(ctx) {
+                    p.to_ccs(ctx, ccs, seen)
+                } else {
+                    ProcessCcs::nil()
+                }
+            }
+            Process::Restriction(p, chans) => {
+                let values = ctx.values();
+                let chans = chans
+                    .iter()
+                    .flat_map(|ch| values.iter().map(|v| encode_action(ch.clone(), v)))
+                    .collect();
+                ProcessCcs::restriction(p.to_ccs(ctx, ccs, seen), chans)
+            }
+            Process::Substitution(p, subs) => {
+                let values = ctx.values();
+                let chans = subs
+                    .pairs()
+                    .iter()
+                    .flat_map(|(new, old)| {
+                        values
+                            .iter()
+                            .map(|v| (encode_action(new.clone(), v), encode_action(old.clone(), v)))
+                    })
+                    .collect();
+                ProcessCcs::substitution(p.to_ccs(ctx, ccs, seen), Substitution::new(chans))
+            }
+        }
+    }
+    fn try_replace(&mut self, var: &str, val: &Value) -> bool {
         match self {
             Process::Constant(_, vals) => vals.iter_mut().all(|v| v.try_replace(var, val)),
             Process::Sum(vec) => vec.iter_mut().all(|p| p.try_replace(var, val)),
@@ -30,68 +125,6 @@ impl Process {
             Process::IfThen(b, p) => b.try_replace(var, val) && p.try_replace(var, val),
             Process::Restriction(p, _) => p.try_replace(var, val),
             Process::Substitution(p, _) => p.try_replace(var, val),
-        }
-    }
-    pub fn to_ccs(self, ctx: &Context) -> ProcessCcs {
-        match self {
-            Process::Constant(name, vals) => {
-                ProcessCcs::constant(name + "#" + &vals.into_iter().map(|v| v.eval(ctx)).join("#"))
-            }
-            Process::Action(ch, p) => match ch {
-                Channel::Tau => ProcessCcs::action(ChannelCcs::Tau, p.to_ccs(ctx)),
-                Channel::Recv(name, None) => {
-                    ProcessCcs::action(ChannelCcs::Recv(name), p.to_ccs(ctx))
-                }
-                Channel::Send(name, None) => {
-                    ProcessCcs::action(ChannelCcs::Send(name), p.to_ccs(ctx))
-                }
-                Channel::Send(name, Some(e)) => {
-                    ProcessCcs::action(ChannelCcs::Send(e.eval(ctx).mangle(name)), p.to_ccs(ctx))
-                }
-                Channel::Recv(name, Some(var)) => {
-                    let mut possibles = vec![];
-                    for val in ctx.values() {
-                        let mut p = p.clone();
-                        if p.try_replace(&var, &val) {
-                            possibles.push(ProcessCcs::action(
-                                ChannelCcs::Recv(val.mangle(name.clone())),
-                                p.to_ccs(ctx),
-                            ));
-                        }
-                    }
-                    ProcessCcs::sum(possibles)
-                }
-            },
-            Process::Sum(sum) => ProcessCcs::sum(sum.into_iter().map(|p| p.to_ccs(ctx)).collect()),
-            Process::Par(p, q) => ProcessCcs::par(p.to_ccs(ctx), q.to_ccs(ctx)),
-            Process::IfThen(b, p) => {
-                if b.eval(ctx) {
-                    p.to_ccs(ctx)
-                } else {
-                    ProcessCcs::nil()
-                }
-            }
-            Process::Restriction(p, chans) => {
-                let values = ctx.values();
-                let chans = chans
-                    .iter()
-                    .flat_map(|ch| values.iter().map(|v| v.mangle(ch.clone())))
-                    .collect();
-                ProcessCcs::restriction(p.to_ccs(ctx), chans)
-            }
-            Process::Substitution(p, subs) => {
-                let values = ctx.values();
-                let chans = subs
-                    .pairs()
-                    .iter()
-                    .flat_map(|(new, old)| {
-                        values
-                            .iter()
-                            .map(|v| (v.mangle(new.clone()), v.mangle(old.clone())))
-                    })
-                    .collect();
-                ProcessCcs::substitution(p.to_ccs(ctx), Substitution::new(chans))
-            }
         }
     }
 
@@ -183,5 +216,16 @@ impl Display for Channel {
             Channel::Recv(name, None) => write!(f, "{name}?"),
             Channel::Tau => write!(f, "Tau"),
         }
+    }
+}
+
+fn encode_action(name: String, v: &Value) -> String {
+    name + "#" + &v.to_string()
+}
+fn encode_constant(name: String, vals: &[Value]) -> String {
+    if vals.is_empty() {
+        name
+    } else {
+        name + "#" + &vals.iter().join("#")
     }
 }

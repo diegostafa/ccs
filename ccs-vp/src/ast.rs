@@ -9,9 +9,10 @@ use super::process::Process;
 lalrpop_mod!(pub ccs_vp);
 
 pub struct Program(pub Vec<Statement>);
-impl Program {
-    pub fn parse(content: &str) -> Result<Self, ParseError<usize, Token<'_>, &'static str>> {
-        ccs_vp::ProgramNodeParser::new().parse(content)
+impl<'a> TryFrom<&'a str> for Program {
+    type Error = ParseError<usize, Token<'a>, &'static str>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        ccs_vp::ProgramNodeParser::new().parse(value)
     }
 }
 impl Display for Program {

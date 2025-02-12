@@ -1,3 +1,14 @@
+use crate::context::Context;
+
+pub fn print_values(ctx: Context) {
+    for ty in ctx.types() {
+        println!("-------- {}:", ty);
+        for val in ctx.values_of(&ty) {
+            println!("{}", val);
+        }
+    }
+}
+
 pub fn permute<T: Clone>(vals: Vec<Vec<T>>) -> Vec<Vec<T>> {
     fn permute_rec<T: Clone>(vals: &Vec<Vec<T>>, perms: &mut Vec<Vec<T>>, curr: Vec<T>) {
         if curr.len() == vals.len() {

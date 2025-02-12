@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 ccs = { path = "../ccs" }
 ccs-vp = { path = "../ccs-vp" }
-clap = { version = "4.5.26", features = ["derive"] }
+clap = { version = "4.5.28", features = ["derive"] }

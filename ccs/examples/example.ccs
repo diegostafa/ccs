@@ -1,9 +1,0 @@
-fn P1() {
-    c!;main()
-}
-fn P2() {
-    c!;main()
-}
-fn main() {
-    (a!;P1() + b!;P2())
-}

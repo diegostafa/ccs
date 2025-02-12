@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use lalrpop_util::lexer::Token;
+use lalrpop_util::ParseError;
+
 use super::ast::{Program, Statement};
 use super::process::Process;
 use crate::lts::Lts;
@@ -45,8 +48,9 @@ impl From<Program> for Context {
         ctx
     }
 }
-impl From<String> for Context {
-    fn from(value: String) -> Self {
-        Self::from(Program::parse(&value).unwrap())
+impl<'a> TryFrom<&'a str> for Context {
+    type Error = ParseError<usize, Token<'a>, &'static str>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        Ok(Self::from(Program::try_from(value)?))
     }
 }
