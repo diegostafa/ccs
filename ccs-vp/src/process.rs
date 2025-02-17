@@ -170,7 +170,7 @@ impl Display for Process {
                 }
             }
             Process::Action(ch, p) => {
-                write!(f, "{ch}; {p}")
+                write!(f, "{ch}. {p}")
             }
             Process::Sum(procs) => {
                 if procs.is_empty() {

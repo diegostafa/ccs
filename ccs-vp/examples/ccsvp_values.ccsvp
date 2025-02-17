@@ -10,8 +10,7 @@ enum BoolPair { Pair(bool, bool) }
 enum RandomList { List(int, bool, Unit, Color, IntPair) }
 
 fn main() {
-    send!(BoolPair::Pair(true,false));
-    send!(RandomList::List(0, false, Unit::Unit, Color::Red, IntPair::Pair(1, 1)));
-    nil
+    send!(BoolPair::Pair(true,false)).
+    send!(RandomList::List(0, false, Unit::Unit, Color::Red, IntPair::Pair(1, 1)))
 }
 

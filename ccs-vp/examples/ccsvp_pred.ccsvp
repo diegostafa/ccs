@@ -1,5 +1,5 @@
 #![bounds(0..=1000)]
 
-fn pred(n) { if (n > 0) { return!((n - 1)); } }
+fn pred(n) { if (n > 0) { return!((n - 1)) } }
 
 fn main() { (pred(0) | pred(1) | pred(10) | pred(100) | pred(1000)) }

@@ -1,5 +1,5 @@
 #![bounds(0..1)]
 
-fn Variable(x) { (read!(x);Variable(x) + write?(y);Variable(y)) }
+fn Variable(x) { (read!(x).Variable(x) + write?(y).Variable(y)) }
 
-fn main() { (Variable(true) | write!(false);nil) }
+fn main() { (Variable(true) | write!(false)) }

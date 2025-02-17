@@ -23,8 +23,8 @@ ProcessNode: Process =
     <x:Ident> "()"=> Process::constant(x),
 
     #[precedence(level="2")]
-    <m:ChannelNode> ";" <p:ProcessNode> => Process::action(m, p),
-    <m:ChannelNode> ";" => Process::action(m, Process::nil()),
+    <m:ChannelNode> "." <p:ProcessNode> => Process::action(m, p),
+    <m:ChannelNode> "." => Process::action(m, Process::nil()),
     "(" <par:ParProcessList> ")" => par,
     "(" <sum:SumProcessList> ")" => Process::sum(sum),
     "(" <p:ProcessNode> "\\" "{" <chans:VarList> "}" ")" => Process::restriction(p, chans),
