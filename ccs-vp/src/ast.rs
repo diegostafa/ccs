@@ -27,6 +27,7 @@ impl Display for Program {
 #[derive(Debug, Clone)]
 pub enum Command {
     SetBounds(u32, u32),
+    SetMain(String),
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +51,7 @@ impl Display for Statement {
                 write!(f, "enum {name} {{ {tags} }}")
             }
             Statement::DefAlias(alias, ty) => write!(f, "type {alias} = {ty};"),
-            Statement::Exec(c) => write!(f, "#![{c:?}] "),
+            Statement::Exec(c) => write!(f, "#![{c:?}]"),
         }
     }
 }

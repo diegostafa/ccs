@@ -5,10 +5,12 @@ use lalrpop_util::ParseError;
 
 use super::ast::{Program, Statement};
 use super::process::Process;
+use crate::ast::Command;
 use crate::lts::Lts;
 
 #[derive(Debug, Clone, Default)]
 pub struct Context {
+    main: String,
     constants: HashMap<String, Process>,
 }
 impl Context {
@@ -33,8 +35,14 @@ impl Context {
             .find(|(_, process)| *process == p)
             .map(|(id, _)| id.as_str())
     }
+    pub fn set_main(&mut self, main: String) {
+        self.main = main;
+    }
     pub fn to_lts(&self) -> Lts {
-        self.get_process("main").unwrap().clone().derive_lts(self)
+        self.constants
+            .get(&self.main)
+            .unwrap_or_else(|| panic!("Main process \"{}\" not found", self.main));
+        Process::constant(&self.main).derive_lts(self)
     }
 }
 impl From<Program> for Context {
@@ -43,6 +51,9 @@ impl From<Program> for Context {
         for stmt in value.0 {
             match stmt {
                 Statement::DefConstant(name, def) => ctx.bind_process(name, def.clone()),
+                Statement::Exec(cmd) => match cmd {
+                    Command::SetMain(main) => ctx.set_main(main),
+                },
             }
         }
         ctx

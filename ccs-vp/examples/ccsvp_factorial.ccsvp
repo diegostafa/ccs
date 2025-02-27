@@ -1,3 +1,4 @@
+#![start(main)]
 #![bounds(0..1000)]
 
 fn factorial(n) { factorial_rec(n, 1) }

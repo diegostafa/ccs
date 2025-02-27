@@ -12,6 +12,7 @@ use crate::values::Enum;
 
 #[derive(Debug, Clone, Default)]
 pub struct Context {
+    main: String,
     constants: HashMap<String, (Vec<String>, Process)>,
     enums: HashMap<String, Vec<(String, Vec<String>)>>,
     aliases: HashMap<String, String>,
@@ -19,7 +20,6 @@ pub struct Context {
     cached_values: HashMap<String, Vec<Value>>,
 }
 impl Context {
-    const MAIN: &'static str = "main";
     const INT_TY: &'static str = "int";
     const BOOL_TY: &'static str = "bool";
     const ANY_TY: &'static str = "any";
@@ -49,8 +49,13 @@ impl Context {
     }
 
     pub fn to_ccs(&self) -> ContextCcs {
+        self.constants
+            .get(&self.main)
+            .unwrap_or_else(|| panic!("Main process \"{}\" not found", self.main));
+
         let mut ccs = ContextCcs::default();
-        Process::constant(Self::MAIN, vec![]).to_ccs(self, &mut ccs, &mut HashSet::new());
+        ccs.set_main(self.main.clone());
+        Process::constant(&self.main, vec![]).to_ccs(self, &mut ccs, &mut HashSet::new());
         ccs
     }
     pub fn bind_enum(&mut self, ty: String, tags: Vec<(String, Vec<String>)>) {
@@ -77,6 +82,9 @@ impl Context {
     pub fn set_bounds(&mut self, (min, max): (u32, u32)) {
         assert!(min < max);
         self.int_bounds = (min, max);
+    }
+    pub fn set_main(&mut self, main: String) {
+        self.main = main;
     }
     pub fn bounds(&self) -> (u32, u32) {
         self.int_bounds
@@ -129,14 +137,12 @@ impl From<Program> for Context {
         let mut ctx = Self::default();
         for stmt in value.0 {
             match stmt {
-                Statement::DefConstant(name, def) if name == Self::MAIN => {
-                    ctx.bind_process(Self::MAIN.to_string(), def)
-                }
                 Statement::DefConstant(name, def) => ctx.bind_process(name, def.clone()),
                 Statement::DefEnum(name, tags) => ctx.bind_enum(name, tags.clone()),
                 Statement::DefAlias(alias, ty) => ctx.bind_alias(alias, ty),
                 Statement::Exec(cmd) => match cmd {
                     Command::SetBounds(min, max) => ctx.set_bounds((min, max)),
+                    Command::SetMain(main) => ctx.set_main(main),
                 },
             }
         }

@@ -1,3 +1,6 @@
+#![start(main)]
+
 fn P1() { c!.main() }
-fn P2() { c!.main() }
+fn P2() { c!.P3() }
+fn P3() { d!.nil }
 fn main() { (a!.P1() + b!.P2()) }

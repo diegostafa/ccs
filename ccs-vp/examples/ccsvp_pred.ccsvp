@@ -1,3 +1,4 @@
+#![start(main)]
 #![bounds(0..=1000)]
 
 fn pred(n) { if (n > 0) { return!((n - 1)) } }

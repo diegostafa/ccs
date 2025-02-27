@@ -1,3 +1,4 @@
+#![start(main)]
 #![bounds(0..4)]
 
 type Id = int;

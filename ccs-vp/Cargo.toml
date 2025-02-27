@@ -7,6 +7,6 @@ edition = "2021"
 lalrpop = "0.22.0"
 
 [dependencies]
-itertools = "0.13.0"
+itertools = "0.14.0"
 lalrpop-util = { version = "0.22.0", features = ["lexer"] }
 ccs = { path = "../ccs" }

@@ -26,12 +26,11 @@ StatementNode: Statement = {
     "fn" <name:Ident> "(" <params:VarList> ")" "{" <body:ProcessNode> "}" => Statement::DefConstant(name, (params, body)),
     "fn" <name:Ident> "(" <params:VarList> ")" "{" <body:ProcessNode> "}" "[" <subs:SubstitutionList> "]" => Statement::DefConstant(name, (params, Process::substitution(body, Substitution::new(subs)))),
     "fn" <name:Ident> "(" <params:VarList> ")" "{" <body:ProcessNode> "}" "\\" "{" <chans:VarList> "}" => Statement::DefConstant(name, (params, Process::restriction(body, chans))),
-
-    "fn main" "()""{" <body:ProcessNode> "}" => Statement::DefConstant("main".to_string(), (vec![], body)),
 }
 CommandNode: Command = {
     "bounds" "(" <min:Number> ".." <max:Number> ")" => Command::SetBounds(min, max),
     "bounds" "(" <min:Number> "..=" <max:Number> ")" => Command::SetBounds(min, max + 1),
+    "start" "(" <main:Ident> ")" => Command::SetMain(main),
 }
 
 ProcessNode: Process = {

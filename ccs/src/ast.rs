@@ -26,14 +26,20 @@ impl Display for Program {
 #[derive(Debug, Clone)]
 pub enum Statement {
     DefConstant(String, Process),
+    Exec(Command),
 }
-
 impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Statement::DefConstant(name, p) => {
                 write!(f, "fn {name}() {{ {p} }}")
             }
+            Statement::Exec(c) => write!(f, "#![{c:?}]"),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Command {
+    SetMain(String),
 }

@@ -2,6 +2,7 @@ use cli_tables::Table;
 
 use crate::context::Context;
 use crate::lts::{Bisimulation, Lts};
+use crate::process::Process;
 
 pub fn print_bisimulation(b: &Bisimulation) {
     println!("Bisimulation:");
@@ -48,7 +49,12 @@ pub fn print_ccs(ccs: &Context) {
         println!("fn {name} {{  {body} }}");
     }
 }
-
+pub fn print_stats(lts: &Lts) {
+    println!("Stats:");
+    println!("States: {}", lts.nodes().len());
+    println!("Actions: {}", lts.edges().len());
+    println!("Transitions: {}", lts.transitions().len());
+}
 fn draw_table(headers: Vec<&str>, rows: Vec<Vec<String>>) {
     assert!(!headers.is_empty());
     assert!(!rows.is_empty());
@@ -65,8 +71,10 @@ fn draw_table(headers: Vec<&str>, rows: Vec<Vec<String>>) {
 pub fn run_example(ctx: Context) {
     print_ccs(&ctx);
     println!();
-    let lts = ctx.to_lts().flatten();
+    let lts = Process::constant("main").derive_lts(&ctx).flatten();
     print_transitions(&lts);
     println!();
     print_bisimulation(&lts.bisimilarity(&lts));
+    println!();
+    print_stats(&lts);
 }

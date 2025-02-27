@@ -35,7 +35,7 @@ impl Process {
                 }
                 let (vars, mut body) = ctx
                     .get_process(&name)
-                    .unwrap_or_else(|| panic!("[error] constant {name} not found"))
+                    .unwrap_or_else(|| panic!("[error] constant \"{name}\" not found"))
                     .clone();
                 if !vars
                     .iter()

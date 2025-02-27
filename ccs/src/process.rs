@@ -89,6 +89,9 @@ impl Process {
             Self::Substitution(p, s) => Self::substitution(p.fold_consts(ctx), s),
             Self::Restriction(p, r) => Self::restriction(p.fold_consts(ctx), r),
         };
+        if p.is_nil() {
+            return p;
+        }
         ctx.process_to_const(&p).unwrap_or(p)
     }
     pub fn unfold_consts(self, ctx: &Context) -> Self {
@@ -126,6 +129,7 @@ impl Process {
     }
 
     pub fn derive_lts(self, ctx: &Context) -> Lts {
+        let main = self.clone();
         let unfolded = self.unfold_consts(ctx);
         let mut transitions = unfolded.derive();
         let mut len = 0;
@@ -135,7 +139,16 @@ impl Process {
                 transitions.extend(t.2.derive());
             }
         }
-        Lts::new(transitions)
+        let transitions = transitions
+            .into_iter()
+            .map(|(a, b, c)| {
+                let a = if unfolded == a { main.clone() } else { a };
+                let c = if unfolded == c { main.clone() } else { c };
+                (a, b, c)
+            })
+            .collect();
+
+        Lts::new(transitions).symbolic(ctx)
     }
     fn derive(&self) -> HashSet<Transition> {
         match self {

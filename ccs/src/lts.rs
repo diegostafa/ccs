@@ -44,11 +44,11 @@ impl Lts {
                 .collect(),
         )
     }
-    pub fn symbolic(self, ctx: Context) -> Self {
+    pub fn symbolic(self, ctx: &Context) -> Self {
         Self(
             self.0
                 .into_iter()
-                .map(|t| (t.0.fold_consts(&ctx), t.1, t.2.fold_consts(&ctx)))
+                .map(|t| (t.0.fold_consts(ctx), t.1, t.2.fold_consts(ctx)))
                 .collect(),
         )
     }
@@ -76,10 +76,9 @@ impl Lts {
         let f = |r: &Bisimulation<'a, 'b>| {
             let is_similar = |this: &Lts, other: &Lts, p: &Process, q: &Process| {
                 this.transitions_from(p).iter().all(|pt| {
-                    other
-                        .transitions_from(q)
-                        .iter()
-                        .any(|qt| pt.1 == qt.1 && r.contains(&(&pt.2, &qt.2)))
+                    other.transitions_from(q).iter().any(|qt| {
+                        pt.1 == qt.1 && (r.contains(&(&pt.2, &qt.2)) || r.contains(&(&qt.2, &pt.2)))
+                    })
                 })
             };
             r.iter()

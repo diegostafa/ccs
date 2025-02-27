@@ -1,4 +1,5 @@
-#![bounds(0..1)]
+#![start(main)]
+#![bounds(0..=0)]
 
 fn Variable(x) { (read!(x).Variable(x) + write?(y).Variable(y)) }
 

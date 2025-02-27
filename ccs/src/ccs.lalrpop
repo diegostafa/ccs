@@ -10,11 +10,16 @@ Whitespace: () = r"\s+";
 Ident: String = r"[a-zA-Z_][a-zA-Z0-9_]*" => <>.to_string();
 Number: u32 = r"[0-9]+" => FromStr::from_str(<>).unwrap();
 
-pub ProgramNode: Program = { <stmts:StatementList> => Program(stmts) }
+pub ProgramNode: Program = {
+    <stmts:StatementList> => Program(stmts)
 
+}
 StatementNode: Statement = {
-    "fn main" "()""{" <body:ProcessNode> "}" => Statement::DefConstant("main".to_string(), body),
+    "#!" "[" <cmd:CommandNode> "]" => Statement::Exec(cmd),
     "fn" <name:Ident> "()" "{" <body:ProcessNode> "}" => Statement::DefConstant(name, body),
+}
+CommandNode: Command = {
+    "start" "(" <main:Ident> ")" => Command::SetMain(main),
 }
 ProcessNode: Process =
 {
